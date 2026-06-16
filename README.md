@@ -29,7 +29,27 @@
   - Fedora: `sudo dnf install ffmpeg`
   - macOS: `brew install ffmpeg`
   - Windows: `winget install ffmpeg` 或访问 [ffmpeg.org](https://ffmpeg.org/download.html)
-  - 或者：首次运行 SubFlow 会自动下载静态 FFmpeg (~80MB)
+  - 或者：首次运行 SubFlow 会自动下载静态 FFmpeg (~80MB) 和 CJK 字体 (~32MB)
+
+### 缓存目录
+
+SubFlow 自动下载的模型、字体和 FFmpeg 存放在以下位置：
+
+| 资源 | 说明 |
+|------|------|
+| Whisper 模型 | `缓存目录/models/` |
+| CJK 字体 | `缓存目录/fonts/` |
+| FFmpeg 静态二进制 | `缓存目录/ffmpeg` (Windows: `ffmpeg.exe`) |
+
+各平台缓存目录路径：
+
+| 平台 | 缓存目录 |
+|------|----------|
+| Linux | `~/.cache/subflow/` (或 `$XDG_CACHE_HOME/subflow/`) |
+| macOS | `~/Library/Caches/subflow/` |
+| Windows | `%LOCALAPPDATA%\subflow\` |
+
+如果需要离线使用，可以提前将文件放入对应目录，SubFlow 会跳过下载。
 
 ### 安装 SubFlow
 
@@ -205,7 +225,7 @@ export SUBFLOW_TRANSLATOR_MODEL="deepseek-chat"
 A: 如果有 GPU，SubFlow 会自动使用 CUDA 加速（快 3-10 倍）。CPU 用户可尝试更小的模型：`--model small` 或 `--model tiny`。
 
 **Q: 模型放哪？**
-A: 首次运行自动下载到 `~/.cache/subflow/models/`。可用 `--model-dir` 自定义。
+A: 首次运行自动下载到缓存目录。可用 `--model-dir` 自定义。详见上方「缓存目录」。
 
 **Q: 字幕不准确怎么办？**
 A: 尝试更大的模型：`--model large-v3`，或手动指定语言：`--lang zh`。
