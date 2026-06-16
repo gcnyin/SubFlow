@@ -29,10 +29,13 @@ def _platform_key() -> str:
     """Return the platform key for FFmpeg download (e.g. 'linux-x86_64')."""
     system = platform.system().lower()
     machine = platform.machine().lower()
+    # Normalize: Python returns 'windows' but BtbN uses 'win32'
+    if system == "windows":
+        system = "win32"
     if machine in ("x86_64", "amd64"):
         arch = "x86_64"
     elif machine in ("aarch64", "arm64"):
-        arch = "arm64" if system != "darwin" else "arm64"
+        arch = "arm64"
     else:
         arch = "x86_64"  # best-effort fallback
     return f"{system}-{arch}"
@@ -46,7 +49,9 @@ def _ensure_bundled_ffmpeg(cache_dir: Path) -> Path:
     Raises:
         RuntimeError: If download fails.
     """
-    ffmpeg_path = cache_dir / "ffmpeg"
+    is_windows = platform.system() == "Windows"
+    exe_name = "ffmpeg.exe" if is_windows else "ffmpeg"
+    ffmpeg_path = cache_dir / exe_name
     if ffmpeg_path.exists():
         return ffmpeg_path
 
@@ -94,8 +99,9 @@ def _ensure_bundled_ffmpeg(cache_dir: Path) -> Path:
             else:
                 raise RuntimeError(f"不支持的压缩格式: {archive_name}")
 
-            # Make executable
-            ffmpeg_path.chmod(ffmpeg_path.stat().st_mode | stat.S_IEXEC)
+            # Make executable (Unix only; Windows doesn't need this)
+            if not is_windows:
+                ffmpeg_path.chmod(ffmpeg_path.stat().st_mode | stat.S_IEXEC)
             print(f"   ✓ FFmpeg 就绪: {ffmpeg_path}")
 
         except Exception as e:
