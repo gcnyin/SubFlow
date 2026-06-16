@@ -205,3 +205,50 @@ def check_ffmpeg(ffmpeg_path: str | None = None) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"FFmpeg 可执行但异常: {result.stderr.strip()}")
     return path
+
+
+def probe_video(filepath: Path, ffmpeg_path: str | None = None) -> tuple[int, int]:
+    """Probe video resolution (width, height) using ffprobe.
+
+    Args:
+        filepath: Path to video file.
+        ffmpeg_path: Optional path to ffmpeg (used to locate ffprobe).
+
+    Returns:
+        (width, height) tuple.
+
+    Raises:
+        RuntimeError: If resolution cannot be determined.
+    """
+    path = get_ffmpeg_path(ffmpeg_path)
+    ffprobe = str(Path(path).parent / "ffprobe")
+    if path == "ffprobe":
+        ffprobe = "ffprobe"
+
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=p=0",
+            str(filepath),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0 or not result.stdout.strip():
+        raise RuntimeError(
+            f"无法获取视频分辨率: {filepath}\n"
+            f"  ffprobe stderr: {result.stderr.strip()}"
+        )
+
+    parts = result.stdout.strip().split(",")
+    if len(parts) >= 2:
+        try:
+            return int(parts[0]), int(parts[1])
+        except ValueError:
+            pass
+
+    raise RuntimeError(f"无法解析视频分辨率输出: {result.stdout.strip()}")

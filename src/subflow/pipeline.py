@@ -87,12 +87,18 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
     temp_audio = False
 
     try:
-        # ── Step 1: Audio extraction ──
+        # ═══════════════════════════════════════════
+        # Step 1/5: Audio extraction
+        # ═══════════════════════════════════════════
+        logger.info("")
+        logger.info("━" * 50)
+        logger.info("Step 1/5: 音频提取")
+        logger.info("━" * 50)
         if is_audio_file(input_file):
             audio_file = input_file
-            logger.info("检测到音频文件，跳过提取")
+            logger.info("   检测到音频文件, 跳过提取")
         else:
-            logger.info("提取音频...")
+            logger.info("   从视频提取音频...")
             t0 = time.time()
             audio_file = extract_audio(
                 input_file,
@@ -104,20 +110,34 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
             temp_audio = config.keep_audio is None
             size_mb = audio_file.stat().st_size / (1024 * 1024)
             elapsed = time.time() - t0
-            logger.info("完成 (%.1fs, %.1fMB)", elapsed, size_mb)
+            logger.info("   完成 (%.1fs, %.1fMB)", elapsed, size_mb)
 
-        # ── Step 2: Create transcriber ──
+        # ═══════════════════════════════════════════
+        # Step 2/5: Load transcription model
+        # ═══════════════════════════════════════════
+        logger.info("")
+        logger.info("━" * 50)
+        logger.info("Step 2/5: 加载模型")
+        logger.info("━" * 50)
         device_desc = detect_device()
-        logger.info("使用设备: %s", device_desc)
+        logger.info("   计算设备: %s", device_desc)
+        logger.info("   模型: %s", config.model)
 
+        t0 = time.time()
         transcriber = create_transcriber(
             model_size=config.model,
             device=config.device,
             model_dir=config.model_path(),
         )
+        logger.info("   模型加载完成 (%.1fs)", time.time() - t0)
 
-        # ── Step 3: Transcription ──
-        logger.info("语音识别 (模型: %s)...", config.model)
+        # ═══════════════════════════════════════════
+        # Step 3/5: Speech recognition
+        # ═══════════════════════════════════════════
+        logger.info("")
+        logger.info("━" * 50)
+        logger.info("Step 3/5: 语音识别")
+        logger.info("━" * 50)
         t0 = time.time()
 
         words, detected_lang = transcriber.transcribe(
@@ -128,7 +148,7 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
 
         source_lang = config.language or detected_lang
         elapsed = time.time() - t0
-        logger.info("识别完成 (%.1fs, %d 词)", elapsed, len(words))
+        logger.info("   识别完成 (%.1fs, %d 词, 语言: %s)", elapsed, len(words), source_lang)
 
         if not words:
             raise RuntimeError("未识别到任何语音内容")
@@ -137,9 +157,17 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
         if config.dump_json:
             json_path = _source_output_path(input_file, config).with_suffix(".transcript.json")
             _dump_transcript_json(words, json_path, source_lang)
+            logger.info("   Transcript JSON -> %s", json_path)
 
-        # ── Step 4: Alignment and splitting ──
-        logger.info("生成字幕...")
+        # ═══════════════════════════════════════════
+        # Step 4/5: Align and split into subtitles
+        # ═══════════════════════════════════════════
+        logger.info("")
+        logger.info("━" * 50)
+        logger.info("Step 4/5: 字幕拆分与对齐")
+        logger.info("━" * 50)
+        logger.info("   参数: 每行 <=%d 词, 每行 <=%.1fs",
+                     config.max_words_per_line, config.max_duration_seconds)
         t0 = time.time()
 
         items = split_and_align(
@@ -147,35 +175,51 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
             max_words=config.max_words_per_line,
             max_duration=config.max_duration_seconds,
         )
+        logger.info("   拆分为 %d 条字幕 (%.1fs)", len(items), time.time() - t0)
 
-        # ── Step 5: Output source subtitles ──
+        # ── Write source subtitles ──
         source_path = _source_output_path(input_file, config)
         result_path: Path | None = source_path
         if not config.no_source:
             write_subtitle(items, source_path, fmt=config.default_format)
-            logger.info("%d 条字幕 -> %s", len(items), source_path)
+            logger.info("   原文字幕 -> %s", source_path)
         else:
             result_path = None
 
-        # ── Step 6: Translation (optional) ──
+        # ═══════════════════════════════════════════
+        # Step 5/5: Translation (optional)
+        # ═══════════════════════════════════════════
         if config.target_langs:
+            logger.info("")
+            logger.info("━" * 50)
+            logger.info("Step 5/5: AI 翻译")
+            logger.info("━" * 50)
             translator = create_translator(config.translator)
+            logger.info("   API: %s", config.translator.base_url)
+            logger.info("   模型: %s", config.translator.model)
+            logger.info("   温度: %.1f", config.translator.temperature)
             for target_lang in config.target_langs:
-                logger.info("翻译 %s->%s (%d 句)...", source_lang, target_lang, len(items))
+                logger.info("   %s -> %s", source_lang, target_lang)
                 t_t0 = time.time()
                 try:
                     translated = translator.translate(items, source_lang, target_lang)
                     trans_path = _translated_output_path(input_file, config, target_lang)
                     write_subtitle(translated, trans_path, fmt=config.default_format)
                     t_elapsed = time.time() - t_t0
-                    logger.info("完成 (%.1fs) -> %s", t_elapsed, trans_path)
+                    logger.info("   译文字幕 -> %s (%.1fs)", trans_path, t_elapsed)
                     if result_path is None:
                         result_path = trans_path
                 except Exception as e:
-                    logger.error("翻译失败 (%s->%s): %s", source_lang, target_lang, e)
+                    logger.error("   翻译失败 (%s->%s): %s", source_lang, target_lang, e)
 
-        # ── Step 7: Burn subtitles (optional) ──
+        # ═══════════════════════════════════════════
+        # Bonus: Burn subtitles (optional)
+        # ═══════════════════════════════════════════
         if config.burn:
+            logger.info("")
+            logger.info("━" * 50)
+            logger.info("Bonus: 字幕烧录")
+            logger.info("━" * 50)
             to_burn: list[tuple[Path, str]] = []
             if not config.no_source and config.burn_source:
                 to_burn.append((source_path, ""))
@@ -196,20 +240,36 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
                 else:
                     out_video = input_file.parent / out_name
 
+                logger.info("   烧录 %s -> %s", srt_path.name, out_video.name)
                 try:
+                    t0 = time.time()
+                    bc = config.burn_config
                     burn_subtitle(
                         video_path=input_file,
                         subtitle_path=srt_path,
                         output_path=out_video,
+                        font=bc.font or None,
+                        font_size=bc.font_size,
+                        font_color=bc.font_color,
+                        outline_color=bc.outline_color,
+                        outline_width=bc.outline_width,
+                        position=bc.position,
+                        margin=bc.margin,
+                        fonts_dir=bc.fonts_dir or None,
+                        crf=bc.crf,
                         ffmpeg=config.ffmpeg_path,
                     )
+                    logger.info("   烧录完成 (%.1fs)", time.time() - t0)
                     if result_path is None:
                         result_path = out_video
                 except Exception as e:
-                    logger.error("烧录失败: %s", e)
+                    logger.error("   烧录失败: %s", e)
 
         total_elapsed = time.time() - start_time
-        logger.info("总耗时: %.1fs", total_elapsed)
+        logger.info("")
+        logger.info("═" * 50)
+        logger.info("管线完成! 总耗时: %.1fs", total_elapsed)
+        logger.info("═" * 50)
 
         return result_path if result_path is not None else source_path
 

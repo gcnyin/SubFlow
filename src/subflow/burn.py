@@ -9,10 +9,19 @@ import subprocess
 import time
 from pathlib import Path
 
-from subflow.ffmpeg import check_ffmpeg
+from subflow.ffmpeg import check_ffmpeg, probe_video
 from subflow.logging import get_logger
 
 logger = get_logger(__name__)
+
+# ── Auto-sizing constants ──
+
+_FONT_HEIGHT_RATIO = 30  # font_size = video_height / 30 (1080p → 36px)
+_MIN_FONT_SIZE = 18
+_MAX_FONT_SIZE = 80
+
+_OUTLINE_RATIO = 0.06  # outline_width = round(font_size * 0.06)
+_MIN_OUTLINE = 1
 
 # ── Constants ──
 
@@ -53,6 +62,22 @@ def _resolve_color(color: str) -> str:
     # #RRGGBB → &H00BBGGRR (FFmpeg ASS format, no alpha)
     r, g, b = hex_color[1:3], hex_color[3:5], hex_color[5:7]
     return f"&H00{b}{g}{r}"
+
+
+def _auto_font_size(video_height: int) -> int:
+    """Calculate font size from video height.
+
+    font_size = clamp(video_height / 30, 18, 80)
+    """
+    return max(_MIN_FONT_SIZE, min(_MAX_FONT_SIZE, round(video_height / _FONT_HEIGHT_RATIO)))
+
+
+def _auto_outline_width(font_size: int) -> int:
+    """Calculate outline width from font size.
+
+    outline_width = max(1, round(font_size * 0.06))
+    """
+    return max(_MIN_OUTLINE, round(font_size * _OUTLINE_RATIO))
 
 
 def _ensure_fonts(fonts_dir: Path) -> Path:
@@ -96,7 +121,7 @@ def _build_force_style(
     font_size: int = 24,
     font_color: str = "white",
     outline_color: str = "black",
-    outline_width: int = 2,
+    outline_width: int = 1,
     position: str = "bottom",
     margin: int = 12,
 ) -> str:
@@ -159,10 +184,10 @@ def burn_subtitle(
     subtitle_path: Path,
     output_path: Path,
     font: str | None = None,
-    font_size: int = 24,
+    font_size: int = 0,
     font_color: str = "white",
     outline_color: str = "black",
-    outline_width: int = 2,
+    outline_width: int = 0,
     position: str = "bottom",
     margin: int = 12,
     fonts_dir: str | None = None,
@@ -179,10 +204,10 @@ def burn_subtitle(
         subtitle_path: Path to the SRT subtitle file.
         output_path: Path for the output video.
         font: Font name or path to .ttf/.otf file. Auto-detect CJK font if None.
-        font_size: Font size in pixels.
+        font_size: Font size in pixels (0 = auto from video height).
         font_color: Font color (#RRGGBB or name).
         outline_color: Outline color (#RRGGBB or name, 'none' to disable).
-        outline_width: Outline width in pixels.
+        outline_width: Outline width in pixels (0 = auto from font size).
         position: Subtitle position (bottom/top/middle).
         margin: Bottom margin in pixels.
         fonts_dir: Directory containing font files.
@@ -208,6 +233,20 @@ def burn_subtitle(
         raise RuntimeError(f"字幕文件不存在: {subtitle_path}")
 
     ffmpeg_path = check_ffmpeg(ffmpeg)
+
+    # ── Auto-sizing ──
+    if font_size == 0:
+        try:
+            _, height = probe_video(video_path, ffmpeg_path)
+            font_size = _auto_font_size(height)
+            logger.info("自动字号: %dpx (视频高度 %dpx)", font_size, height)
+        except Exception as e:
+            logger.warning("无法获取视频分辨率, 使用默认字号 24: %s", e)
+            font_size = 24
+
+    if outline_width == 0:
+        outline_width = _auto_outline_width(font_size)
+        logger.info("自动描边: %dpx (字号 %dpx)", outline_width, font_size)
 
     # Font setup
     if fonts_dir:

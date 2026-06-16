@@ -299,33 +299,33 @@ def burn(
         typer.Option("--font", help="字体名称或 .ttf/.otf 路径"),
     ] = None,
     font_size: Annotated[
-        int,
-        typer.Option("--font-size", help="字号 (默认 24)"),
-    ] = 24,
+        int | None,
+        typer.Option("--font-size", help="字号 (0=自动按视频高度缩放)"),
+    ] = None,
     font_color: Annotated[
-        str,
-        typer.Option("--font-color", help="字体颜色 #RRGGBB 或颜色名 (默认 white)"),
-    ] = "white",
+        str | None,
+        typer.Option("--font-color", help="字体颜色 #RRGGBB 或颜色名"),
+    ] = None,
     outline_color: Annotated[
-        str,
-        typer.Option("--outline-color", help="描边颜色，none 关闭 (默认 black)"),
-    ] = "black",
+        str | None,
+        typer.Option("--outline-color", help="描边颜色, none 关闭"),
+    ] = None,
     outline_width: Annotated[
-        int,
-        typer.Option("--outline-width", help="描边粗细/px (默认 2)"),
-    ] = 2,
+        int | None,
+        typer.Option("--outline-width", help="描边粗细/px (0=自动按字号缩放)"),
+    ] = None,
     position: Annotated[
-        str,
-        typer.Option("--position", help="字幕位置: bottom/top/middle (默认 bottom)"),
-    ] = "bottom",
+        str | None,
+        typer.Option("--position", help="字幕位置: bottom/top/middle"),
+    ] = None,
     margin: Annotated[
-        int,
-        typer.Option("--margin", help="底部边距/px (默认 12)"),
-    ] = 12,
+        int | None,
+        typer.Option("--margin", help="底部边距/px"),
+    ] = None,
     crf: Annotated[
-        int,
+        int | None,
         typer.Option("--crf", help="CRF 质量 (默认 23, 越小越清晰)"),
-    ] = 23,
+    ] = None,
     fonts_dir: Annotated[
         str | None,
         typer.Option("--fonts-dir", help="字体目录"),
@@ -343,6 +343,20 @@ def burn(
       subflow burn video.mp4 -s sub.srt --font-color yellow --outline-color black
     """
     from subflow.burn import burn_subtitle
+    from subflow.config import load_config
+
+    # Merge with config file defaults
+    cfg = load_config().burn_config
+
+    _font_size = font_size if font_size is not None else cfg.font_size
+    _outline_width = outline_width if outline_width is not None else cfg.outline_width
+    _font_color = font_color if font_color is not None else cfg.font_color
+    _outline_color = outline_color if outline_color is not None else cfg.outline_color
+    _position = position if position is not None else cfg.position
+    _margin = margin if margin is not None else cfg.margin
+    _crf = crf if crf is not None else cfg.crf
+    _font = font or cfg.font or None
+    _fonts_dir = fonts_dir or cfg.fonts_dir or None
 
     # Default subtitle path: same stem as video, .srt extension
     if subtitle is None:
@@ -357,15 +371,15 @@ def burn(
         video_path=video,
         subtitle_path=subtitle,
         output_path=out_path,
-        font=font,
-        font_size=font_size,
-        font_color=font_color,
-        outline_color=outline_color,
-        outline_width=outline_width,
-        position=position,
-        margin=margin,
-        fonts_dir=fonts_dir,
-        crf=crf,
+        font=_font,
+        font_size=_font_size,
+        font_color=_font_color,
+        outline_color=_outline_color,
+        outline_width=_outline_width,
+        position=_position,
+        margin=_margin,
+        fonts_dir=_fonts_dir,
+        crf=_crf,
         ffmpeg=ffmpeg,
     )
 

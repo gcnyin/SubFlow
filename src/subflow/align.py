@@ -1,9 +1,13 @@
 """Word-level alignment and smart splitting into subtitle items."""
 
 import re
+import time
 from collections.abc import Callable
 
+from subflow.logging import get_logger
 from subflow.models import SubtitleItem, WordTimestamp
+
+logger = get_logger(__name__)
 
 # Characters that signal a natural break point for subtitle splitting
 _SENTENCE_BOUNDARY = re.compile(r"[。！？，、；：.!?,;:\"')}\]】》）»]")
@@ -47,11 +51,15 @@ def split_and_align(
     if not words:
         return []
 
+    t0 = time.time()
+    logger.info("   输入: %d 个词级时间戳", len(words))
+
     items: list[SubtitleItem] = []
     group: list[WordTimestamp] = []
     index = 1
+    break_reasons: dict[str, int] = {"boundary": 0, "words": 0, "duration": 0}
 
-    def _flush() -> None:
+    def _flush(reason: str = "") -> None:
         nonlocal index
         if not group:
             return
@@ -87,18 +95,31 @@ def split_and_align(
 
         # Determine if we should break
         should_break = False
+        reason = ""
 
         # Hard limits (max words/duration) or soft limit (sentence boundary with enough content)
-        should_break = (
-            group_word_count >= max_words
-            or group_duration >= max_duration
-            or (group_word_count >= 3 and _is_boundary(word.word))
-        )
+        if group_word_count >= max_words:
+            should_break = True
+            reason = "words"
+        elif group_duration >= max_duration:
+            should_break = True
+            reason = "duration"
+        elif group_word_count >= 3 and _is_boundary(word.word):
+            should_break = True
+            reason = "boundary"
 
         if should_break:
-            _flush()
+            break_reasons[reason] = break_reasons.get(reason, 0) + 1
+            _flush(reason)
 
     # Flush remaining words
-    _flush()
+    _flush("final")
+
+    elapsed = time.time() - t0
+    logger.info("   拆分完成: %d 条字幕 (%.2fs)", len(items), elapsed)
+    logger.info("   拆分原因: 标点=%d, 词数=%d, 时长=%d",
+                 break_reasons.get("boundary", 0),
+                 break_reasons.get("words", 0),
+                 break_reasons.get("duration", 0))
 
     return items

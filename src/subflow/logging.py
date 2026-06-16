@@ -28,13 +28,13 @@ def setup_logging(verbose: int = 0) -> None:
     handler.setLevel(level)
 
     if verbose >= 2:
-        fmt = "%(levelname)-7s [%(name)s] %(message)s"
+        fmt = "%(asctime)s %(levelname)-7s [%(name)s] %(message)s"
     elif verbose == 1:
-        fmt = "%(levelname)-7s %(message)s"
+        fmt = "%(asctime)s %(levelname)-7s %(message)s"
     else:
-        fmt = "%(message)s"
+        fmt = "%(asctime)s %(message)s"
 
-    handler.setFormatter(logging.Formatter(fmt))
+    handler.setFormatter(logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S"))
     ROOT_LOGGER.addHandler(handler)
     ROOT_LOGGER.setLevel(level)
 

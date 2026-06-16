@@ -46,7 +46,7 @@ class TestBuildForceStyle:
         assert "PrimaryColour=" in style
         assert "OutlineColour=" in style
         assert "BorderStyle=1" in style
-        assert "Outline=2" in style
+        assert "Outline=1" in style
 
     def test_custom_font_and_size(self) -> None:
         """Custom font and size should appear in style."""

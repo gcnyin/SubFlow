@@ -66,6 +66,25 @@ class TranslatorConfig:
 
 
 @dataclass
+class BurnConfig:
+    """Configuration for subtitle burning (hard subtitles).
+
+    Zero values for font_size / outline_width mean "auto"
+    (font_size derived from video height, outline_width from font_size).
+    """
+
+    font: str = ""
+    font_size: int = 0
+    font_color: str = "white"
+    outline_color: str = "black"
+    outline_width: int = 0
+    position: str = "bottom"
+    margin: int = 12
+    crf: int = 23
+    fonts_dir: str = ""
+
+
+@dataclass
 class SubFlowConfig:
     """Configuration for the SubFlow pipeline.
 
@@ -97,6 +116,7 @@ class SubFlowConfig:
     burn: bool = False
     burn_lang: str | None = None
     burn_source: bool = True
+    burn_config: BurnConfig = field(default_factory=BurnConfig)
 
     # Misc
     audio_track: int = 0
@@ -166,6 +186,10 @@ def load_config(config_path: str | None = None) -> SubFlowConfig:
                         for tk, tv in value.items():
                             if hasattr(config.translator, tk) and tv is not None:
                                 setattr(config.translator, tk, tv)
+                    elif key == "burn" and isinstance(value, dict):
+                        for bk, bv in value.items():
+                            if hasattr(config.burn_config, bk) and bv is not None:
+                                setattr(config.burn_config, bk, bv)
                     elif hasattr(config, key) and value is not None:
                         setattr(config, key, value)
         except Exception as e:

@@ -62,14 +62,15 @@ def extract_audio(
     if stream_count == 0:
         raise RuntimeError(f"文件中未找到音轨: {filepath}")
     if stream_count > 1 and audio_track == 0:
-        logger.warning(
-            "检测到 %d 条音轨，默认使用音轨 0。使用 --audio-track 切换。",
-            stream_count,
-        )
+        logger.info("   检测到 %d 条音轨, 默认使用音轨 0。使用 --audio-track 切换。", stream_count)
+    else:
+        logger.info("   音轨数: %d, 选用音轨 #%d", stream_count, audio_track)
 
     if output_path is None:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             output_path = Path(tmp.name)
+
+    logger.info("   格式: 16kHz mono WAV")
 
     # FFmpeg command: extract audio, resample to 16kHz mono, output PCM WAV
     cmd = [

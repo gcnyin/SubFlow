@@ -131,6 +131,9 @@ class Translator(ABC):
         ...
 
 
+DEFAULT_BATCH_SIZE = 40
+
+
 class OpenAITranslator(Translator):
     """Translator backed by any OpenAI-compatible chat completions API."""
 
@@ -142,6 +145,7 @@ class OpenAITranslator(Translator):
         temperature: float = 0.2,
         extra_params: dict[str, Any] | None = None,
         max_retries: int = 2,
+        batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -149,12 +153,14 @@ class OpenAITranslator(Translator):
         self.temperature = temperature
         self.extra_params = extra_params or {}
         self.max_retries = max_retries
+        self.batch_size = batch_size
 
-    def _call_api(self, messages: list[dict[str, str]]) -> str:
+    def _call_api(self, messages: list[dict[str, str]], batch_label: str = "") -> str:
         """Call the chat completions API with retry logic.
 
         Args:
             messages: Chat messages.
+            batch_label: Optional label for log messages (e.g. "[1/15]").
 
         Returns:
             Raw response text from the LLM.
@@ -163,9 +169,12 @@ class OpenAITranslator(Translator):
             httpx.HTTPError: On network/API failure after retries.
         """
         last_error: Exception | None = None
+        label = f"{batch_label} " if batch_label else ""
 
         for attempt in range(self.max_retries + 1):
             try:
+                t0 = time.time()
+                logger.info("%s调用 API (%s)...", label, self.model)
                 resp = httpx.post(
                     f"{self.base_url}/chat/completions",
                     headers={
@@ -183,18 +192,23 @@ class OpenAITranslator(Translator):
 
                 if resp.status_code == 429:
                     wait = 2**attempt
+                    logger.warning("%s频率限制, 等待 %ds...", label, wait)
                     time.sleep(wait)
                     continue
 
                 resp.raise_for_status()
                 body = resp.json()
                 content: str = body["choices"][0]["message"]["content"]
+                elapsed = time.time() - t0
+                logger.info("%sAPI 响应 (%.1fs)", label, elapsed)
                 return content
 
             except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.ConnectError) as e:
                 last_error = e
+                logger.warning("%sAPI 调用失败 (尝试 %d/%d): %s", label, attempt + 1, self.max_retries + 1, e)
                 if attempt < self.max_retries:
-                    time.sleep(2**attempt)
+                    wait = 2**attempt
+                    time.sleep(wait)
 
         raise last_error if last_error is not None else RuntimeError(
             "Translation API call failed after retries")
@@ -206,6 +220,8 @@ class OpenAITranslator(Translator):
         target_lang: str,
     ) -> list[SubtitleItem]:
         """Translate subtitle items via OpenAI-compatible API.
+
+        Splits items into batches for better progress visibility and reliability.
 
         Args:
             items: Source subtitle items with time ranges.
@@ -221,24 +237,57 @@ class OpenAITranslator(Translator):
         if not items:
             return []
 
-        messages = _build_messages(items, source_lang, target_lang)
-        response_text = self._call_api(messages)
-        data = _parse_response(response_text, len(items))
+        total = len(items)
+        batch_size = self.batch_size
+        total_batches = (total + batch_size - 1) // batch_size
 
-        # Build result, matching by index
-        translated_map: dict[int, str] = {}
-        for entry in data:
-            idx = entry.get("i")
-            text = entry.get("t", "")
-            if isinstance(idx, int) and isinstance(text, str) and text.strip():
-                translated_map[idx] = text.strip()
+        logger.info("开始翻译: %s -> %s, 共 %d 句, 分 %d 批 (每批 <=%d 句)",
+                     source_lang, target_lang, total, total_batches, batch_size)
 
+        all_results: dict[int, str] = {}  # index → translated text
+        overall_t0 = time.time()
+
+        for batch_idx in range(total_batches):
+            start = batch_idx * batch_size
+            end = min(start + batch_size, total)
+            batch_items = items[start:end]
+            batch_label = f"[{batch_idx + 1}/{total_batches}]"
+
+            logger.info("%s 第 %d 批: 句 %d-%d (%d 句)",
+                         batch_label, batch_idx + 1, batch_items[0].index, batch_items[-1].index, len(batch_items))
+
+            # Build messages for this batch
+            t0 = time.time()
+            messages = _build_messages(batch_items, source_lang, target_lang)
+            build_time = time.time() - t0
+            logger.info("%s 构建提示词 (%.1fs, %.1fKB)",
+                         batch_label, build_time, len(messages[0]["content"]) / 1024)
+
+            # Call API
+            response_text = self._call_api(messages, batch_label)
+
+            # Parse response
+            t0 = time.time()
+            data = _parse_response(response_text, len(batch_items))
+            parse_time = time.time() - t0
+            logger.info("%s 解析响应 (%.1fs), 得到 %d 条", batch_label, parse_time, len(data))
+
+            # Merge results
+            for entry in data:
+                idx = entry.get("i")
+                text = entry.get("t", "")
+                if isinstance(idx, int) and isinstance(text, str) and text.strip():
+                    all_results[idx] = text.strip()
+
+        # Build final result, matching by index
+        missing_count = 0
         result: list[SubtitleItem] = []
         for item in items:
-            new_text = translated_map.get(item.index)
+            new_text = all_results.get(item.index)
             if new_text is None:
-                logger.warning("索引 %d 的翻译缺失，保留原文", item.index)
+                logger.warning("索引 %d 的翻译缺失, 保留原文", item.index)
                 new_text = item.text
+                missing_count += 1
 
             result.append(
                 SubtitleItem(
@@ -246,9 +295,13 @@ class OpenAITranslator(Translator):
                     start=item.start,
                     end=item.end,
                     text=new_text,
-                    words=[],  # No word-level timestamps for translated text
+                    words=[],
                 )
             )
+
+        overall_elapsed = time.time() - overall_t0
+        logger.info("翻译完成: %d/%d 句 (%.1fs), 缺失 %d 句",
+                     total - missing_count, total, overall_elapsed, missing_count)
 
         return result
 
