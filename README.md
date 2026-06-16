@@ -11,6 +11,7 @@
 - **词级时间戳** — 每个词都有精确的开始/结束时间
 - **智能拆分** — 自动按句子边界、字数和时长拆分字幕行
 - **本地离线** — 基于 faster-whisper，无需网络，隐私安全
+- **AI 翻译** — 通过 LLM（OpenAI/DeepSeek/本地 ollama）将字幕翻译为多语言
 - **多语言检测** — 自动识别语言，也可手动指定
 - **SRT + VTT** — 两种最通用的字幕格式
 - **批量处理** — 支持多文件同时处理
@@ -59,6 +60,21 @@ uv run subflow podcast.mp3
 
 # 使用更大的模型获得更高精度
 uv run subflow video.mp4 --model large-v3
+
+# 翻译为英文（自动检测源语言）
+uv run subflow video.mp4 -t en
+
+# 同时翻译为英文和日文
+uv run subflow video.mp4 -t en,ja
+
+# 使用 DeepSeek 翻译（通过环境变量配置密钥）
+export SUBFLOW_TRANSLATOR_API_KEY="sk-xxx"
+export SUBFLOW_TRANSLATOR_BASE_URL="https://api.deepseek.com/v1"
+export SUBFLOW_TRANSLATOR_MODEL="deepseek-chat"
+uv run subflow video.mp4 -t en
+
+# 仅输出译文（不保留原文）
+uv run subflow video.mp4 -t en --no-source
 ```
 
 ## CLI 参数
@@ -85,6 +101,14 @@ Usage: subflow [OPTIONS] FILES...
   --audio-track INT      音轨索引 (默认: 0)
   --keep-audio TEXT      保留提取的音频到指定路径
 
+翻译选项:
+  --target-lang, -t TEXT 目标语言，逗号分隔 (如 en,ja)
+  --no-source            不输出原文字幕
+  --translator-base-url   LLM API 地址
+  --translator-api-key    LLM API 密钥
+  --translator-model      LLM 模型名
+  --translator-temperature LLM 温度 (默认 0.2)
+
 处理选项:
   --max-duration FLOAT   最大处理时长（秒）
   --max-words INT        每行字幕最大词数 (默认: 15)
@@ -109,6 +133,33 @@ model = "medium"
 default_format = "srt"
 max_words_per_line = 15
 max_duration_seconds = 3.0
+
+[translator]
+base_url = "https://api.deepseek.com/v1"
+model = "deepseek-chat"
+# api_key 建议通过环境变量设置（更安全）
+# 也可以写在这里：api_key = "sk-xxx"
+```
+
+### 翻译配置
+
+SubFlow 通过 OpenAI 兼容接口调用 LLM 进行翻译，支持任何兼容的 provider：
+
+| Provider | base_url | 说明 |
+|----------|----------|------|
+| DeepSeek | `https://api.deepseek.com/v1` | 便宜，中英文优秀 |
+| OpenAI | `https://api.openai.com/v1` | 质量最高 |
+| Groq | `https://api.groq.com/openai/v1` | 速度快 |
+| 本地 ollama | `http://localhost:11434/v1` | 完全离线 |
+| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 中文最佳 |
+
+API 密钥优先级：`CLI flag > 环境变量 > 配置文件`
+
+```bash
+# 环境变量方式（推荐）
+export SUBFLOW_TRANSLATOR_API_KEY="sk-xxx"
+export SUBFLOW_TRANSLATOR_BASE_URL="https://api.deepseek.com/v1"
+export SUBFLOW_TRANSLATOR_MODEL="deepseek-chat"
 ```
 
 ## 管线流程
@@ -122,7 +173,10 @@ max_duration_seconds = 3.0
     │
     ├─ 📐 智能拆分 (按句子边界/字数/时长)
     │
-    └─ 📝 字幕输出 (SRT / VTT)
+    ├─ 📝 原文字幕输出 (SRT / VTT)
+    │
+    └─ 🌐 AI 翻译 (LLM via OpenAI-compatible API)
+         └─ 多语言字幕输出 (SRT / VTT)
 ```
 
 ## 常见问题
@@ -138,6 +192,12 @@ A: 尝试更大的模型：`--model large-v3`，或手动指定语言：`--lang 
 
 **Q: 长视频内存不够？**
 A: 使用 `--model small` 减少显存占用，或用 `--max-duration 600` 分段处理。
+
+**Q: 如何使用翻译功能？**
+A: 设置 LLM API 环境变量后，加 `-t en` 即可翻译。支持 OpenAI / DeepSeek / Groq / ollama 等任何兼容接口。详见上方「翻译配置」表格。
+
+**Q: 翻译能保留原文吗？**
+A: 默认同时输出原文和译文（如 `video.srt` + `video.en.srt`）。加 `--no-source` 可关闭原文。
 
 ## 开发
 
