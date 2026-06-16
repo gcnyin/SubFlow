@@ -63,7 +63,7 @@ def extract_audio(
         raise RuntimeError(f"文件中未找到音轨: {filepath}")
     if stream_count > 1 and audio_track == 0:
         logger.warning(
-            "Detected %d audio tracks, using track 0. Use --audio-track to switch.",
+            "检测到 %d 条音轨，默认使用音轨 0。使用 --audio-track 切换。",
             stream_count,
         )
 

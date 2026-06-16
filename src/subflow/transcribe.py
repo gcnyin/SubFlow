@@ -43,7 +43,7 @@ class FasterWhisperTranscriber(Transcriber):
 
         from faster_whisper import WhisperModel  # type: ignore[import-untyped]
 
-        logger.info("Downloading model %s... (first run, ~150MB-6GB)", self.model_size)
+        logger.info("下载模型 %s 中... (首次运行，约 150MB-6GB)", self.model_size)
         self._model = WhisperModel(
             self.model_size,
             device=self.device,
@@ -82,7 +82,7 @@ class FasterWhisperTranscriber(Transcriber):
 
         detected_language = info.language
         logger.info(
-            "Detected language: %s (probability: %.2f%%)",
+            "检测到语言: %s (概率: %.2f%%)",
             detected_language, info.language_probability * 100,
         )
 
@@ -116,7 +116,7 @@ class FasterWhisperTranscriber(Transcriber):
             ],
         }
         output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        logger.info("Transcript saved: %s", output_path)
+        logger.info("Transcript 已保存: %s", output_path)
 
 
 def detect_device() -> str:

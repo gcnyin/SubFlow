@@ -72,7 +72,7 @@ def _ensure_fonts(fonts_dir: Path) -> Path:
         if font_path.exists():
             continue
 
-        logger.info("Downloading font %s (~16MB)...", font_name)
+        logger.info("下载字体 %s (~16MB)...", font_name)
         try:
             resp = httpx.get(url, follow_redirects=True, timeout=120.0)
             resp.raise_for_status()
@@ -269,7 +269,7 @@ def burn_subtitle(
         cmd.insert(idx, f"-fontsdir={fonts_dir}")
 
     logger.info(
-        "Burning subtitles (encoder: %s): %s -> %s",
+        "烧录字幕 (编码器: %s): %s -> %s",
         encoder, subtitle_path.name, output_path.name,
     )
     t0 = time.time()
@@ -282,6 +282,6 @@ def burn_subtitle(
 
     elapsed = time.time() - t0
     size_mb = output_path.stat().st_size / (1024 * 1024)
-    logger.info("Done (%.1fs, %.1fMB)", elapsed, size_mb)
+    logger.info("完成 (%.1fs, %.1fMB)", elapsed, size_mb)
 
     return output_path

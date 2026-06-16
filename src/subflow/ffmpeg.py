@@ -65,8 +65,8 @@ def _ensure_bundled_ffmpeg(cache_dir: Path) -> Path:
         raise RuntimeError(f"不支持的平台: {key}，请手动安装 FFmpeg")
 
     url = f"{_BASE_URL}/{archive_name}"
-    logger.info("Downloading FFmpeg (~80MB)...")
-    logger.info("Source: %s", url)
+    logger.info("下载 FFmpeg 中 (~80MB)...")
+    logger.info("来源: %s", url)
 
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -89,7 +89,7 @@ def _ensure_bundled_ffmpeg(cache_dir: Path) -> Path:
                 print()  # newline after progress
 
             # Extract ffmpeg binary from archive
-            logger.info("Extracting...")
+            logger.info("解压中...")
             if archive_name.endswith(".tar.xz"):
                 with tarfile.open(tmp_path) as tar:
                     for member in tar.getmembers():
@@ -106,7 +106,7 @@ def _ensure_bundled_ffmpeg(cache_dir: Path) -> Path:
             # Make executable (Unix only; Windows doesn't need this)
             if not is_windows:
                 ffmpeg_path.chmod(ffmpeg_path.stat().st_mode | stat.S_IEXEC)
-            logger.info("FFmpeg ready: %s", ffmpeg_path)
+            logger.info("FFmpeg 就绪: %s", ffmpeg_path)
 
         except Exception as e:
             raise RuntimeError(

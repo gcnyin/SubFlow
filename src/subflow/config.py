@@ -169,7 +169,7 @@ def load_config(config_path: str | None = None) -> SubFlowConfig:
                     elif hasattr(config, key) and value is not None:
                         setattr(config, key, value)
         except Exception as e:
-            logger.warning("Failed to read config (%s): %s, using defaults", config_file, e)
+            logger.warning("配置文件读取失败 (%s): %s，使用默认配置", config_file, e)
 
     # Environment variable overrides for sensitive translator settings
     for env_var, attr in [

@@ -237,7 +237,7 @@ class OpenAITranslator(Translator):
         for item in items:
             new_text = translated_map.get(item.index)
             if new_text is None:
-                logger.warning("Index %d missing in translation, keeping source text", item.index)
+                logger.warning("索引 %d 的翻译缺失，保留原文", item.index)
                 new_text = item.text
 
             result.append(

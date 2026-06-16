@@ -263,9 +263,9 @@ def main(
             error_msg = str(e)
             failed.append((filepath, error_msg))
             if verbose > 0:
-                logger.exception("Failed: %s", filepath)
+                logger.exception("处理失败: %s", filepath)
             else:
-                logger.error("Failed: %s", error_msg)
+                logger.error("处理失败: %s", error_msg)
 
     # ── Summary ──
     if total > 1:
