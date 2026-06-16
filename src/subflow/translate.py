@@ -193,7 +193,8 @@ class OpenAITranslator(Translator):
                 if attempt < self.max_retries:
                     time.sleep(2**attempt)
 
-        raise last_error  # type: ignore[misc]
+        raise last_error if last_error is not None else RuntimeError(
+            "Translation API call failed after retries")
 
     def translate(
         self,

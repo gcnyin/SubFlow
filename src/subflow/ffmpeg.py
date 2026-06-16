@@ -64,38 +64,50 @@ def _ensure_bundled_ffmpeg(cache_dir: Path) -> Path:
     # Download to temp file
     tmp_path = cache_dir / f"{archive_name}.tmp"
     try:
-        with httpx.stream("GET", url, follow_redirects=True, timeout=300.0) as resp:
-            resp.raise_for_status()
-            total = int(resp.headers.get("content-length", 0))
-            downloaded = 0
-            with open(tmp_path, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total:
-                        pct = downloaded / total * 100
-                        mb = downloaded / (1024 * 1024)
-                        print(f"\r   下载中... {mb:.0f}MB ({pct:.0f}%)", end="", flush=True)
-            print()  # newline after progress
+        try:
+            with httpx.stream("GET", url, follow_redirects=True, timeout=300.0) as resp:
+                resp.raise_for_status()
+                total = int(resp.headers.get("content-length", 0))
+                downloaded = 0
+                with open(tmp_path, "wb") as f:
+                    for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            pct = downloaded / total * 100
+                            mb = downloaded / (1024 * 1024)
+                            print(f"\r   下载中... {mb:.0f}MB ({pct:.0f}%)", end="", flush=True)
+                print()  # newline after progress
 
-        # Extract ffmpeg binary from archive
-        print("   解压中...")
-        if archive_name.endswith(".tar.xz"):
-            with tarfile.open(tmp_path) as tar:
-                for member in tar.getmembers():
-                    if member.name.endswith("/ffmpeg") and member.isfile():
-                        tar.extract(member, path=cache_dir, filter="data")
-                        extracted = cache_dir / member.name
-                        extracted.rename(ffmpeg_path)
-                        break
-                else:
-                    raise RuntimeError("FFmpeg 压缩包中未找到 ffmpeg 可执行文件")
-        else:
-            raise RuntimeError(f"不支持的压缩格式: {archive_name}")
+            # Extract ffmpeg binary from archive
+            print("   解压中...")
+            if archive_name.endswith(".tar.xz"):
+                with tarfile.open(tmp_path) as tar:
+                    for member in tar.getmembers():
+                        if member.name.endswith("/ffmpeg") and member.isfile():
+                            tar.extract(member, path=cache_dir, filter="data")
+                            extracted = cache_dir / member.name
+                            extracted.rename(ffmpeg_path)
+                            break
+                    else:
+                        raise RuntimeError("FFmpeg 压缩包中未找到 ffmpeg 可执行文件")
+            else:
+                raise RuntimeError(f"不支持的压缩格式: {archive_name}")
 
-        # Make executable
-        ffmpeg_path.chmod(ffmpeg_path.stat().st_mode | stat.S_IEXEC)
-        print(f"   ✓ FFmpeg 就绪: {ffmpeg_path}")
+            # Make executable
+            ffmpeg_path.chmod(ffmpeg_path.stat().st_mode | stat.S_IEXEC)
+            print(f"   ✓ FFmpeg 就绪: {ffmpeg_path}")
+
+        except Exception as e:
+            raise RuntimeError(
+                f"FFmpeg 下载失败: {e}\n"
+                f"  请手动安装 FFmpeg：\n"
+                f"  • Ubuntu/Debian: sudo apt install ffmpeg\n"
+                f"  • Arch Linux:     sudo pacman -S ffmpeg\n"
+                f"  • Fedora:         sudo dnf install ffmpeg\n"
+                f"  • macOS:          brew install ffmpeg\n"
+                f"  或手动下载 ffmpeg 放到: {ffmpeg_path}"
+            ) from e
 
     finally:
         tmp_path.unlink(missing_ok=True)

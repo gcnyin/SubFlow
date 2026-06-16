@@ -53,6 +53,9 @@ def _ensure_fonts(fonts_dir: Path) -> Path:
     """Ensure CJK fonts exist, downloading if necessary.
 
     Returns the fonts_dir path for use in FFmpeg's fontsdir option.
+
+    Raises:
+        RuntimeError: If font download fails with friendly install guide.
     """
     import httpx
 
@@ -64,9 +67,20 @@ def _ensure_fonts(fonts_dir: Path) -> Path:
             continue
 
         print(f"📥 下载字体 {font_name} (~16MB)...")
-        resp = httpx.get(url, follow_redirects=True, timeout=120.0)
-        resp.raise_for_status()
-        font_path.write_bytes(resp.content)
+        try:
+            resp = httpx.get(url, follow_redirects=True, timeout=120.0)
+            resp.raise_for_status()
+            font_path.write_bytes(resp.content)
+        except Exception as e:
+            raise RuntimeError(
+                f"字体下载失败: {font_name}\n"
+                f"  错误: {e}\n"
+                f"  手动下载: {url}\n"
+                f"  放到: {font_path}\n"
+                f"  macOS: brew install font-noto-sans-cjk-sc\n"
+                f"  Arch:  sudo pacman -S noto-fonts-cjk\n"
+                f"  Ubuntu: sudo apt install fonts-noto-cjk"
+            ) from e
 
     return fonts_dir
 
