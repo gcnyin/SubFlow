@@ -12,6 +12,7 @@
 - **智能拆分** — 自动按句子边界、字数和时长拆分字幕行
 - **本地离线** — 基于 faster-whisper，无需网络，隐私安全
 - **AI 翻译** — 通过 LLM（OpenAI/DeepSeek/本地 ollama）将字幕翻译为多语言
+- **烧录字幕** — 将字幕嵌入视频画面（硬字幕），白字黑边可定制
 - **多语言检测** — 自动识别语言，也可手动指定
 - **SRT + VTT** — 两种最通用的字幕格式
 - **批量处理** — 支持多文件同时处理
@@ -22,12 +23,13 @@
 
 - **Python 3.11+**
 - **uv** — Python 包管理器: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **FFmpeg** — 音频处理:
+- **FFmpeg** — 音频处理和字幕烧录（首次自动下载，也可手动安装）：
   - Ubuntu/Debian: `sudo apt install ffmpeg`
   - Arch Linux: `sudo pacman -S ffmpeg`
   - Fedora: `sudo dnf install ffmpeg`
   - macOS: `brew install ffmpeg`
   - Windows: `winget install ffmpeg` 或访问 [ffmpeg.org](https://ffmpeg.org/download.html)
+  - 或者：首次运行 SubFlow 会自动下载静态 FFmpeg (~80MB)
 
 ### 安装 SubFlow
 
@@ -75,6 +77,15 @@ uv run subflow video.mp4 -t en
 
 # 仅输出译文（不保留原文）
 uv run subflow video.mp4 -t en --no-source
+
+# 翻译并直接烧录到视频
+uv run subflow video.mp4 -t en --burn
+
+# 手动烧录已有字幕
+uv run subflow burn video.mp4 -s video.en.srt
+
+# 自定义字体样式
+uv run subflow burn video.mp4 -s video.srt --font-color yellow --outline-color black
 ```
 
 ## CLI 参数
@@ -109,6 +120,12 @@ Usage: subflow [OPTIONS] FILES...
   --translator-model      LLM 模型名
   --translator-temperature LLM 温度 (默认 0.2)
 
+烧录选项:
+  --burn                 生成字幕时同时烧录到视频
+  --burn-lang TEXT       指定烧录的语言 (多目标语言时)
+  --no-burn-source       不烧录原文字幕
+  --ffmpeg-path TEXT     FFmpeg 可执行文件路径
+
 处理选项:
   --max-duration FLOAT   最大处理时长（秒）
   --max-words INT        每行字幕最大词数 (默认: 15)
@@ -121,6 +138,7 @@ Usage: subflow [OPTIONS] FILES...
 
 其他命令:
   subflow list-models    列出可用的 Whisper 模型
+  subflow burn           将字幕烧录到视频（硬字幕）
 ```
 
 ## 配置
@@ -175,8 +193,10 @@ export SUBFLOW_TRANSLATOR_MODEL="deepseek-chat"
     │
     ├─ 📝 原文字幕输出 (SRT / VTT)
     │
-    └─ 🌐 AI 翻译 (LLM via OpenAI-compatible API)
-         └─ 多语言字幕输出 (SRT / VTT)
+    ├─ 🌐 AI 翻译 (LLM via OpenAI-compatible API)
+    │   └─ 多语言字幕输出 (SRT / VTT)
+    │
+    └─ 🎬 字幕烧录 (FFmpeg → 硬字幕视频)
 ```
 
 ## 常见问题
@@ -199,6 +219,9 @@ A: 设置 LLM API 环境变量后，加 `-t en` 即可翻译。支持 OpenAI / D
 **Q: 翻译能保留原文吗？**
 A: 默认同时输出原文和译文（如 `video.srt` + `video.en.srt`）。加 `--no-source` 可关闭原文。
 
+**Q: 如何烧录字幕到视频？**
+A: 生成时加 `--burn` 一键烧录，或单独使用 `subflow burn video.mp4 -s sub.srt`。默认白字黑边，可自定义字体/颜色/位置。
+
 ## 开发
 
 ```bash
@@ -211,16 +234,13 @@ uv run pytest
 # 代码检查
 uv run ruff check
 uv run mypy
-
-# 安装 pre-commit hooks
-uv run pre-commit install
 ```
 
 ## 路线图
 
 - [x] 0.1.0 — 核心管线（faster-whisper + SRT/VTT + 智能拆分）
 - [x] 0.2.0 — 翻译功能（多语言字幕）
-- [ ] 0.3.0 — 烧录字幕（hardsub，FFmpeg 嵌入视频）
+- [x] 0.3.0 — 烧录字幕（hardsub，FFmpeg 嵌入视频）
 - [ ] 1.0.0 — 稳定 API + 完整文档 + PyPI 发布
 
 ## 许可
