@@ -137,6 +137,26 @@ def main(
         float | None,
         typer.Option("--translator-temperature", help="LLM 温度 (默认 0.2)"),
     ] = None,
+    # ── Burn options ──
+    burn: Annotated[
+        bool,
+        typer.Option("--burn", help="生成字幕时同时烧录到视频"),
+    ] = False,
+    burn_lang: Annotated[
+        str | None,
+        typer.Option("--burn-lang", help="指定烧录的语言 (多目标语言时)"),
+    ] = None,
+    no_burn_source: Annotated[
+        bool,
+        typer.Option("--no-burn-source", help="不烧录原文字幕"),
+    ] = False,
+    ffmpeg_path: Annotated[
+        str | None,
+        typer.Option(
+            "--ffmpeg-path",
+            help="FFmpeg 可执行文件路径",
+        ),
+    ] = None,
     # ── Processing options ──
     max_duration: Annotated[
         float | None,
@@ -174,6 +194,7 @@ def main(
       subflow video.mp4 --format vtt       # VTT 格式
       subflow video.mp4 -t en              # 翻译为英文
       subflow video.mp4 -t en,ja           # 多语言翻译
+      subflow video.mp4 -t en --burn       # 翻译并烧录到视频
       subflow *.mp4                        # 批量处理
       subflow podcast.mp3 --lang zh        # 指定语言
       subflow video.mp4 -vv --dump-json    # 调试模式
@@ -223,6 +244,14 @@ def main(
         config.translator.model = translator_model
     if translator_temperature is not None:
         config.translator.temperature = translator_temperature
+    # Burn overrides
+    overrides["burn"] = burn
+    if burn_lang is not None:
+        overrides["burn_lang"] = burn_lang
+    if no_burn_source:
+        overrides["burn_source"] = False
+    if ffmpeg_path is not None:
+        overrides["ffmpeg_path"] = ffmpeg_path
     overrides["dump_json"] = dump_json
     overrides["verbose"] = verbose
 
@@ -258,6 +287,104 @@ def main(
             print(f"❌ 失败: {len(failed)}")
             for f, err in failed:
                 print(f"   • {f.name}: {err}")
+
+
+@app.command(name="burn")
+def burn(
+    video: Annotated[
+        Path,
+        typer.Argument(
+            exists=True, file_okay=True, dir_okay=False, readable=True,
+            help="目标视频文件",
+        ),
+    ],
+    subtitle: Annotated[
+        Path | None,
+        typer.Option("--subtitle", "-s", exists=True, help="字幕文件 (SRT)"),
+    ] = None,
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="输出视频路径"),
+    ] = None,
+    font: Annotated[
+        str | None,
+        typer.Option("--font", help="字体名称或 .ttf/.otf 路径"),
+    ] = None,
+    font_size: Annotated[
+        int,
+        typer.Option("--font-size", help="字号 (默认 24)"),
+    ] = 24,
+    font_color: Annotated[
+        str,
+        typer.Option("--font-color", help="字体颜色 #RRGGBB 或颜色名 (默认 white)"),
+    ] = "white",
+    outline_color: Annotated[
+        str,
+        typer.Option("--outline-color", help="描边颜色，none 关闭 (默认 black)"),
+    ] = "black",
+    outline_width: Annotated[
+        int,
+        typer.Option("--outline-width", help="描边粗细/px (默认 2)"),
+    ] = 2,
+    position: Annotated[
+        str,
+        typer.Option("--position", help="字幕位置: bottom/top/middle (默认 bottom)"),
+    ] = "bottom",
+    margin: Annotated[
+        int,
+        typer.Option("--margin", help="底部边距/px (默认 12)"),
+    ] = 12,
+    encoder: Annotated[
+        str,
+        typer.Option("--encoder", help="视频编码器 (默认 libx264)"),
+    ] = "libx264",
+    crf: Annotated[
+        int,
+        typer.Option("--crf", help="CRF 质量 (默认 23, 越小越清晰)"),
+    ] = 23,
+    fonts_dir: Annotated[
+        str | None,
+        typer.Option("--fonts-dir", help="字体目录"),
+    ] = None,
+    ffmpeg: Annotated[
+        str | None,
+        typer.Option("--ffmpeg-path", help="FFmpeg 可执行文件路径"),
+    ] = None,
+) -> None:
+    """将字幕烧录到视频中（硬字幕）。
+
+    示例:
+      subflow burn video.mp4 -s video.srt
+      subflow burn video.mp4 -s video.en.srt --font "Arial"
+      subflow burn video.mp4 -s sub.srt --font-color yellow --outline-color black
+    """
+    from subflow.burn import burn_subtitle
+
+    # Default subtitle path: same stem as video, .srt extension
+    if subtitle is None:
+        subtitle = video.with_suffix(".srt")
+
+    # Default output path: video.burned.mp4
+    if output is None:
+        output = str(video.parent / f"{video.stem}.burned{video.suffix}")
+    out_path = Path(output).expanduser().resolve()
+
+    burn_subtitle(
+        video_path=video,
+        subtitle_path=subtitle,
+        output_path=out_path,
+        font=font,
+        font_size=font_size,
+        font_color=font_color,
+        outline_color=outline_color,
+        outline_width=outline_width,
+        position=position,
+        margin=margin,
+        fonts_dir=fonts_dir,
+        encoder=encoder,
+        crf=crf,
+        ffmpeg=ffmpeg,
+    )
 
 
 @app.command(name="list-models")

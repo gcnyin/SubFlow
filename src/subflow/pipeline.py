@@ -11,6 +11,7 @@ from typing import Any
 
 from subflow.align import split_and_align
 from subflow.audio import extract_audio, is_audio_file
+from subflow.burn import burn_subtitle
 from subflow.config import SubFlowConfig
 from subflow.subtitle import write_subtitle
 from subflow.transcribe import create_transcriber, detect_device
@@ -165,6 +166,36 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
                     print(f"   ✓ 完成 ({t_elapsed:.1f}s) → {trans_path}")
                 except Exception as e:
                     print(f"   ❌ 翻译失败 ({source_lang}→{target_lang}): {e}")
+
+        # ── Step 7: Burn subtitles (optional) ──
+        if config.burn:
+            # Collect subtitle files to burn
+            to_burn: list[tuple[Path, str]] = []  # (srt_path, kind label)
+            if not config.no_source and config.burn_source:
+                to_burn.append((source_path, ""))
+
+            if config.target_langs:
+                langs_to_burn = config.target_langs
+                if config.burn_lang:
+                    langs_to_burn = [config.burn_lang]
+                for lang in langs_to_burn:
+                    srt_path = _translated_output_path(input_file, config, lang)
+                    if srt_path.exists():
+                        to_burn.append((srt_path, f".{lang}"))
+
+            for srt_path, kind in to_burn:
+                out_name = f"{input_file.stem}{kind}.burned.mp4"
+                if config.output_dir:
+                    out_video = Path(config.output_dir).expanduser().resolve() / out_name
+                else:
+                    out_video = input_file.parent / out_name
+
+                burn_subtitle(
+                    video_path=input_file,
+                    subtitle_path=srt_path,
+                    output_path=out_video,
+                    ffmpeg=config.ffmpeg_path,
+                )
 
         total_elapsed = time.time() - start_time
         print(f"⏱️  总耗时: {total_elapsed:.1f}s")

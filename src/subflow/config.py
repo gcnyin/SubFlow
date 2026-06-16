@@ -63,10 +63,16 @@ class SubFlowConfig:
     no_source: bool = False
     translator: TranslatorConfig = field(default_factory=TranslatorConfig)
 
+    # Burn settings
+    burn: bool = False
+    burn_lang: str | None = None
+    burn_source: bool = True
+
     # Misc
     audio_track: int = 0
     max_duration: float | None = None
     keep_audio: str | None = None
+    ffmpeg_path: str | None = None
     dump_json: bool = False
     verbose: int = 0
 

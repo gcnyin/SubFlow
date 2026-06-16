@@ -1,33 +1,20 @@
 """Audio extraction from video files using FFmpeg."""
 
-import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-
-def _check_ffmpeg() -> None:
-    """Verify ffmpeg is installed and accessible. Raises RuntimeError with install guide if not."""
-    if shutil.which("ffmpeg") is not None:
-        return
-
-    guide_lines = [
-        "FFmpeg 未找到。请安装 FFmpeg：",
-        "  • Ubuntu/Debian: sudo apt install ffmpeg",
-        "  • Arch Linux:     sudo pacman -S ffmpeg",
-        "  • Fedora:         sudo dnf install ffmpeg",
-        "  • macOS:          brew install ffmpeg",
-        "  • Windows:        winget install ffmpeg  或访问 https://ffmpeg.org/download.html",
-    ]
-    raise RuntimeError("\n".join(guide_lines))
+from subflow.ffmpeg import check_ffmpeg
 
 
-def _count_audio_streams(filepath: Path) -> int:
+def _count_audio_streams(filepath: Path, ffmpeg_path: str = "ffprobe") -> int:
     """Return the number of audio streams in a media file."""
+    # Use ffprobe from same directory as ffmpeg
+    ffprobe = str(Path(ffmpeg_path).parent / "ffprobe") if ffmpeg_path != "ffprobe" else "ffprobe"
     result = subprocess.run(
         [
-            "ffprobe",
+            ffprobe,
             "-v", "error",
             "-select_streams", "a",
             "-show_entries", "stream=index",
@@ -51,6 +38,7 @@ def extract_audio(
     filepath: Path,
     output_path: Path | None = None,
     audio_track: int = 0,
+    ffmpeg: str | None = None,
 ) -> Path:
     """Extract audio from a media file as 16kHz mono WAV.
 
@@ -58,6 +46,7 @@ def extract_audio(
         filepath: Path to the media file (video or audio).
         output_path: Optional output path. If None, a temp file is created.
         audio_track: Index of the audio stream to extract (default 0).
+        ffmpeg: Explicit path to ffmpeg executable.
 
     Returns:
         Path to the extracted audio file.
@@ -65,9 +54,9 @@ def extract_audio(
     Raises:
         RuntimeError: If ffmpeg is not installed or extraction fails.
     """
-    _check_ffmpeg()
+    ffmpeg_path = check_ffmpeg(ffmpeg)
 
-    stream_count = _count_audio_streams(filepath)
+    stream_count = _count_audio_streams(filepath, ffmpeg_path)
     if stream_count == 0:
         raise RuntimeError(f"文件中未找到音轨: {filepath}")
     if stream_count > 1 and audio_track == 0:
@@ -83,7 +72,7 @@ def extract_audio(
 
     # FFmpeg command: extract audio, resample to 16kHz mono, output PCM WAV
     cmd = [
-        "ffmpeg",
+        ffmpeg_path,
         "-y",
         "-i", str(filepath),
         "-map", f"0:a:{audio_track}",
