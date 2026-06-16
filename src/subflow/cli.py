@@ -109,6 +109,34 @@ def main(
         str | None,
         typer.Option("--keep-audio", help="保留提取的音频到指定路径"),
     ] = None,
+    # ── Translation options ──
+    target_lang: Annotated[
+        str | None,
+        typer.Option(
+            "--target-lang", "-t",
+            help="目标翻译语言，逗号分隔 (如 en,ja)",
+        ),
+    ] = None,
+    no_source: Annotated[
+        bool,
+        typer.Option("--no-source", help="不输出原文字幕，仅输出译文"),
+    ] = False,
+    translator_base_url: Annotated[
+        str | None,
+        typer.Option("--translator-base-url", help="LLM API 地址"),
+    ] = None,
+    translator_api_key: Annotated[
+        str | None,
+        typer.Option("--translator-api-key", help="LLM API 密钥"),
+    ] = None,
+    translator_model: Annotated[
+        str | None,
+        typer.Option("--translator-model", help="LLM 模型名"),
+    ] = None,
+    translator_temperature: Annotated[
+        float | None,
+        typer.Option("--translator-temperature", help="LLM 温度 (默认 0.2)"),
+    ] = None,
     # ── Processing options ──
     max_duration: Annotated[
         float | None,
@@ -144,6 +172,8 @@ def main(
     示例:
       subflow video.mp4                    # 默认 SRT 字幕
       subflow video.mp4 --format vtt       # VTT 格式
+      subflow video.mp4 -t en              # 翻译为英文
+      subflow video.mp4 -t en,ja           # 多语言翻译
       subflow *.mp4                        # 批量处理
       subflow podcast.mp3 --lang zh        # 指定语言
       subflow video.mp4 -vv --dump-json    # 调试模式
@@ -181,6 +211,18 @@ def main(
         overrides["max_words_per_line"] = max_words
     if max_line_duration > 0:
         overrides["max_duration_seconds"] = max_line_duration
+    # Translation overrides
+    if target_lang is not None:
+        overrides["target_langs"] = [t.strip() for t in target_lang.split(",") if t.strip()]
+    overrides["no_source"] = no_source
+    if translator_base_url is not None:
+        config.translator.base_url = translator_base_url
+    if translator_api_key is not None:
+        config.translator.api_key = translator_api_key
+    if translator_model is not None:
+        config.translator.model = translator_model
+    if translator_temperature is not None:
+        config.translator.temperature = translator_temperature
     overrides["dump_json"] = dump_json
     overrides["verbose"] = verbose
 

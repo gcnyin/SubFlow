@@ -159,7 +159,7 @@ uv run pre-commit install
 ## 路线图
 
 - [x] 0.1.0 — 核心管线（faster-whisper + SRT/VTT + 智能拆分）
-- [ ] 0.2.0 — 翻译功能（多语言字幕）
+- [x] 0.2.0 — 翻译功能（多语言字幕）
 - [ ] 0.3.0 — 烧录字幕（hardsub，FFmpeg 嵌入视频）
 - [ ] 1.0.0 — 稳定 API + 完整文档 + PyPI 发布
 

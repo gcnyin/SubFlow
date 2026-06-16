@@ -95,8 +95,8 @@
 ## 里程碑规划
 
 ```
-0.1.0 — 核心管线通（faster-whisper + SRT/VTT + 智能拆分）
-0.2.0 — 翻译功能（多语言字幕）
-0.3.0 — 烧录字幕（hardsub）
+0.1.0 ✅  核心管线通（faster-whisper + SRT/VTT + 智能拆分）
+0.2.0 ✅  翻译功能（多语言字幕，LLM via OpenAI-compatible API）
+0.3.0 ⬜  烧录字幕（hardsub）
 1.0.0 — 稳定 API + 完整文档 + PyPI 发布
 ```

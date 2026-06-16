@@ -12,8 +12,8 @@ class Transcriber(ABC):
     """Abstract interface for speech-to-text engines."""
 
     @abstractmethod
-    def transcribe(self, audio_path: Path, **kwargs: Any) -> list[WordTimestamp]:
-        """Transcribe an audio file and return word-level timestamps."""
+    def transcribe(self, audio_path: Path, **kwargs: Any) -> tuple[list[WordTimestamp], str]:
+        """Transcribe an audio file and return word-level timestamps with detected language."""
         ...
 
 
@@ -55,8 +55,8 @@ class FasterWhisperTranscriber(Transcriber):
         language: str | None = None,
         beam_size: int = 5,
         **kwargs: object,
-    ) -> list[WordTimestamp]:
-        """Transcribe audio file and return word-level timestamps.
+    ) -> tuple[list[WordTimestamp], str]:
+        """Transcribe audio file and return word-level timestamps with detected language.
 
         Args:
             audio_path: Path to 16kHz mono WAV file.
@@ -65,7 +65,7 @@ class FasterWhisperTranscriber(Transcriber):
             **kwargs: Additional arguments passed to faster-whisper.
 
         Returns:
-            List of WordTimestamp objects with word-level alignment.
+            Tuple of (list of WordTimestamp objects, detected language code).
         """
         model = self._load_model()
 
@@ -95,15 +95,15 @@ class FasterWhisperTranscriber(Transcriber):
                     )
                 )
 
-        return words
+        return words, detected_language
 
     def dump_transcript(
         self, audio_path: Path, output_path: Path, language: str | None = None
     ) -> None:
         """Transcribe and dump full transcript to JSON for debugging."""
-        words = self.transcribe(audio_path, language=language)
+        words, detected_lang = self.transcribe(audio_path, language=language)
         data = {
-            "language": getattr(self, "_last_language", "unknown"),
+            "language": detected_lang,
             "words": [
                 {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
                 for w in words

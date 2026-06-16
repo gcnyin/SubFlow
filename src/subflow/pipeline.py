@@ -1,19 +1,24 @@
 """Pipeline orchestration — connects all stages of subtitle generation."""
 
+from __future__ import annotations
+
 import contextlib
+import json
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 from subflow.align import split_and_align
 from subflow.audio import extract_audio, is_audio_file
 from subflow.config import SubFlowConfig
 from subflow.subtitle import write_subtitle
 from subflow.transcribe import create_transcriber, detect_device
+from subflow.translate import create_translator
 
 
-def _resolve_output_path(input_file: Path, config: SubFlowConfig) -> Path:
-    """Determine the output subtitle file path."""
+def _source_output_path(input_file: Path, config: SubFlowConfig) -> Path:
+    """Determine the output subtitle path for the source (original) language."""
     fmt = config.default_format
 
     if config.output:
@@ -27,6 +32,31 @@ def _resolve_output_path(input_file: Path, config: SubFlowConfig) -> Path:
     return input_file.parent / f"{input_file.stem}.{fmt}"
 
 
+def _translated_output_path(input_file: Path, config: SubFlowConfig, target_lang: str) -> Path:
+    """Determine the output subtitle path for a translated language."""
+    fmt = config.default_format
+
+    if config.output_dir:
+        out_dir = Path(config.output_dir).expanduser().resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return out_dir / f"{input_file.stem}.{target_lang}.{fmt}"
+
+    return input_file.parent / f"{input_file.stem}.{target_lang}.{fmt}"
+
+
+def _dump_transcript_json(words: list[Any], output_path: Path, source_lang: str) -> None:
+    """Write word-level transcript to a JSON file."""
+    data = {
+        "language": source_lang,
+        "words": [
+            {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
+            for w in words
+        ],
+    }
+    output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"📄 Transcript 已保存到: {output_path}")
+
+
 def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
     """Run the full subtitle generation pipeline for a single file.
 
@@ -34,14 +64,16 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
         1. Extract audio (skip if already audio)
         2. Transcribe with faster-whisper
         3. Align and split into subtitle items
-        4. Format and write output
+        4. Output source subtitles
+        5. Translate (optional, if target_langs is set)
+        6. Output translated subtitles
 
     Args:
         input_file: Path to video or audio file.
         config: Pipeline configuration.
 
     Returns:
-        Path to the generated subtitle file.
+        Path to the generated source subtitle file.
 
     Raises:
         RuntimeError: On any pipeline failure.
@@ -85,12 +117,13 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
         print(f"🧠 语音识别 (模型: {config.model})...")
         t0 = time.time()
 
-        words = transcriber.transcribe(
+        words, detected_lang = transcriber.transcribe(
             audio_file,
             language=config.language,
             beam_size=config.beam_size,
         )
 
+        source_lang = config.language or detected_lang
         elapsed = time.time() - t0
         print(f"   ✓ 识别完成 ({elapsed:.1f}s, {len(words)} 词)")
 
@@ -99,17 +132,8 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
 
         # Optional: dump transcript JSON
         if config.dump_json:
-            json_path = _resolve_output_path(input_file, config).with_suffix(".transcript.json")
-            import json
-            data = {
-                "language": config.language or "auto-detected",
-                "words": [
-                    {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
-                    for w in words
-                ],
-            }
-            json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(f"📄 Transcript 已保存到: {json_path}")
+            json_path = _source_output_path(input_file, config).with_suffix(".transcript.json")
+            _dump_transcript_json(words, json_path, source_lang)
 
         # ── Step 4: Alignment and splitting ──
         print("📝 生成字幕...")
@@ -121,16 +145,31 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
             max_duration=config.max_duration_seconds,
         )
 
-        output_path = _resolve_output_path(input_file, config)
-        write_subtitle(items, output_path, fmt=config.default_format)
+        # ── Step 5: Output source subtitles ──
+        source_path = _source_output_path(input_file, config)
+        if not config.no_source:
+            write_subtitle(items, source_path, fmt=config.default_format)
+            print(f"   ✓ {len(items)} 条字幕 → {source_path}")
 
-        elapsed = time.time() - t0
+        # ── Step 6: Translation (optional) ──
+        if config.target_langs:
+            translator = create_translator(config.translator)
+            for target_lang in config.target_langs:
+                print(f"🌐 翻译 {source_lang}→{target_lang} ({len(items)} 句)...")
+                t_t0 = time.time()
+                try:
+                    translated = translator.translate(items, source_lang, target_lang)
+                    trans_path = _translated_output_path(input_file, config, target_lang)
+                    write_subtitle(translated, trans_path, fmt=config.default_format)
+                    t_elapsed = time.time() - t_t0
+                    print(f"   ✓ 完成 ({t_elapsed:.1f}s) → {trans_path}")
+                except Exception as e:
+                    print(f"   ❌ 翻译失败 ({source_lang}→{target_lang}): {e}")
+
         total_elapsed = time.time() - start_time
-
-        print(f"   ✓ {len(items)} 条字幕 → {output_path}")
         print(f"⏱️  总耗时: {total_elapsed:.1f}s")
 
-        return output_path
+        return source_path
 
     finally:
         # Clean up temp audio file

@@ -21,6 +21,21 @@ def _default_cache_dir() -> Path:
 
 
 @dataclass
+class TranslatorConfig:
+    """Configuration for the translation engine.
+
+    API key priority: CLI flag > env SUBFLOW_TRANSLATOR_API_KEY > config file.
+    """
+
+    provider: str = "openai"
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-4o-mini"
+    api_key: str = ""
+    temperature: float = 0.2
+    extra_params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class SubFlowConfig:
     """Configuration for the SubFlow pipeline.
 
@@ -42,6 +57,11 @@ class SubFlowConfig:
     default_format: str = "srt"
     output: str | None = None
     output_dir: str | None = None
+
+    # Translation settings
+    target_langs: list[str] = field(default_factory=list)
+    no_source: bool = False
+    translator: TranslatorConfig = field(default_factory=TranslatorConfig)
 
     # Misc
     audio_track: int = 0
@@ -79,10 +99,12 @@ class SubFlowConfig:
 def load_config(config_path: str | None = None) -> SubFlowConfig:
     """Load configuration from TOML file, falling back to defaults.
 
-    Looks for config at:
-    1. Explicit config_path argument
-    2. ~/.config/subflow/config.toml
-    3. Defaults if neither exists
+    Priority: CLI flag > environment variable > config file > default.
+
+    Env vars:
+        SUBFLOW_TRANSLATOR_API_KEY  — override translator.api_key
+        SUBFLOW_TRANSLATOR_BASE_URL — override translator.base_url
+        SUBFLOW_TRANSLATOR_MODEL    — override translator.model
 
     Args:
         config_path: Optional explicit path to config file.
@@ -104,10 +126,25 @@ def load_config(config_path: str | None = None) -> SubFlowConfig:
 
             if isinstance(data, dict):
                 for key, value in data.items():
-                    if hasattr(config, key) and value is not None:
+                    if key == "translator" and isinstance(value, dict):
+                        for tk, tv in value.items():
+                            if hasattr(config.translator, tk) and tv is not None:
+                                setattr(config.translator, tk, tv)
+                    elif hasattr(config, key) and value is not None:
                         setattr(config, key, value)
         except Exception as e:
             print(f"⚠  配置文件读取失败 ({config_file}): {e}，使用默认配置")
+
+    # Environment variable overrides for sensitive translator settings
+    import os
+    for env_var, attr in [
+        ("SUBFLOW_TRANSLATOR_API_KEY", "api_key"),
+        ("SUBFLOW_TRANSLATOR_BASE_URL", "base_url"),
+        ("SUBFLOW_TRANSLATOR_MODEL", "model"),
+    ]:
+        env_val = os.environ.get(env_var)
+        if env_val:
+            setattr(config.translator, attr, env_val)
 
     # Re-resolve model_dir after loading
     config.__post_init__()
