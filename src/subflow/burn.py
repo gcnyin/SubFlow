@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 # ── Auto-sizing constants ──
 
-_FONT_HEIGHT_RATIO = 30  # font_size = video_height / 30 (1080p → 36px)
+_FONT_HEIGHT_RATIO = 45  # font_size = video_height / 45 (1080p → 24px)
 _MIN_FONT_SIZE = 18
 _MAX_FONT_SIZE = 80
 
@@ -67,7 +67,7 @@ def _resolve_color(color: str) -> str:
 def _auto_font_size(video_height: int) -> int:
     """Calculate font size from video height.
 
-    font_size = clamp(video_height / 30, 18, 80)
+    font_size = clamp(video_height / 45, 18, 80)
     """
     return max(_MIN_FONT_SIZE, min(_MAX_FONT_SIZE, round(video_height / _FONT_HEIGHT_RATIO)))
 

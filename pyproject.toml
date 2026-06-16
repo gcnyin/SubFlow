@@ -26,6 +26,8 @@ dependencies = [
     "rich>=13.0.0",
     "shellingham>=1.5.0",
     "httpx[socks]>=0.28.0",
+    "punctuators>=0.0.7",
+    "onnxruntime>=1.27.0",
 ]
 
 [project.scripts]
