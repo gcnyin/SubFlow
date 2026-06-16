@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import platform
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -123,6 +124,33 @@ def _build_force_style(
     return ",".join(parts)
 
 
+def detect_encoder() -> str:
+    """Detect the best available H.264 hardware encoder.
+
+    Returns:
+        'h264_nvenc' for NVIDIA, 'h264_vaapi' for AMD on Linux,
+        'libx264' as universal CPU fallback.
+    """
+    # NVIDIA: nvidia-smi available → NVENC
+    if shutil.which("nvidia-smi"):
+        return "h264_nvenc"
+
+    # AMD on Linux: /dev/dri/render* exists + AMD vendor → VA-API
+    if platform.system() == "Linux":
+        dri_devices = list(Path("/dev/dri").glob("renderD*"))
+        if dri_devices:
+            # Check vendor: amdgpu driver loaded or AMD PCI device present
+            try:
+                vendor = (Path("/sys/class/drm") / dri_devices[0].name / "device" / "vendor")
+                vendor_id = vendor.read_text().strip()
+                if vendor_id == "0x1002":  # AMD vendor ID
+                    return "h264_vaapi"
+            except (OSError, FileNotFoundError):
+                pass
+
+    return "libx264"
+
+
 def burn_subtitle(
     video_path: Path,
     subtitle_path: Path,
@@ -135,11 +163,13 @@ def burn_subtitle(
     position: str = "bottom",
     margin: int = 12,
     fonts_dir: str | None = None,
-    encoder: str = "libx264",
     crf: int = 23,
     ffmpeg: str | None = None,
 ) -> Path:
     """Burn a subtitle file into a video using FFmpeg.
+
+    Automatically selects the best available encoder:
+    NVIDIA → h264_nvenc, AMD Linux → h264_vaapi, fallback → libx264.
 
     Args:
         video_path: Path to the source video file.
@@ -153,7 +183,6 @@ def burn_subtitle(
         position: Subtitle position (bottom/top/middle).
         margin: Bottom margin in pixels.
         fonts_dir: Directory containing font files.
-        encoder: FFmpeg video encoder.
         crf: Constant Rate Factor (quality, lower = better).
         ffmpeg: Explicit path to FFmpeg executable.
 
@@ -206,6 +235,9 @@ def burn_subtitle(
         margin=margin,
     )
 
+    # Auto-detect best encoder
+    encoder = detect_encoder()
+
     # Build FFmpeg command
     # Use absolute path for subtitle file (FFmpeg subtitles filter needs it)
     sub_abs = subtitle_path.resolve()
@@ -233,7 +265,7 @@ def burn_subtitle(
         idx = cmd.index("-vf")
         cmd.insert(idx, f"-fontsdir={fonts_dir}")
 
-    print(f"🎬 烧录字幕: {subtitle_path.name} → {output_path.name}")
+    print(f"🎬 烧录字幕 (编码器: {encoder}): {subtitle_path.name} → {output_path.name}")
     t0 = time.time()
 
     result = subprocess.run(cmd, capture_output=True, text=True)

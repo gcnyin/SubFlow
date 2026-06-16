@@ -334,10 +334,6 @@ def burn(
         int,
         typer.Option("--margin", help="底部边距/px (默认 12)"),
     ] = 12,
-    encoder: Annotated[
-        str,
-        typer.Option("--encoder", help="视频编码器 (默认 libx264)"),
-    ] = "libx264",
     crf: Annotated[
         int,
         typer.Option("--crf", help="CRF 质量 (默认 23, 越小越清晰)"),
@@ -381,7 +377,6 @@ def burn(
         position=position,
         margin=margin,
         fonts_dir=fonts_dir,
-        encoder=encoder,
         crf=crf,
         ffmpeg=ffmpeg,
     )
