@@ -148,9 +148,12 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
 
         # ── Step 5: Output source subtitles ──
         source_path = _source_output_path(input_file, config)
+        result_path: Path | None = source_path
         if not config.no_source:
             write_subtitle(items, source_path, fmt=config.default_format)
             print(f"   ✓ {len(items)} 条字幕 → {source_path}")
+        else:
+            result_path = None  # Reset — source was not actually written
 
         # ── Step 6: Translation (optional) ──
         if config.target_langs:
@@ -164,6 +167,8 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
                     write_subtitle(translated, trans_path, fmt=config.default_format)
                     t_elapsed = time.time() - t_t0
                     print(f"   ✓ 完成 ({t_elapsed:.1f}s) → {trans_path}")
+                    if result_path is None:
+                        result_path = trans_path
                 except Exception as e:
                     print(f"   ❌ 翻译失败 ({source_lang}→{target_lang}): {e}")
 
@@ -190,17 +195,22 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
                 else:
                     out_video = input_file.parent / out_name
 
-                burn_subtitle(
-                    video_path=input_file,
-                    subtitle_path=srt_path,
-                    output_path=out_video,
-                    ffmpeg=config.ffmpeg_path,
-                )
+                try:
+                    burn_subtitle(
+                        video_path=input_file,
+                        subtitle_path=srt_path,
+                        output_path=out_video,
+                        ffmpeg=config.ffmpeg_path,
+                    )
+                    if result_path is None:
+                        result_path = out_video
+                except Exception as e:
+                    print(f"   ❌ 烧录失败: {e}")
 
         total_elapsed = time.time() - start_time
         print(f"⏱️  总耗时: {total_elapsed:.1f}s")
 
-        return source_path
+        return result_path if result_path is not None else source_path
 
     finally:
         # Clean up temp audio file
