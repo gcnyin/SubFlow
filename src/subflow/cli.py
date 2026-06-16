@@ -1,6 +1,5 @@
 """CLI entry point for SubFlow — AI-powered subtitle generation."""
 
-import logging
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -8,7 +7,10 @@ from typing import Annotated
 import typer
 
 from subflow.config import load_config
+from subflow.logging import get_logger, setup_logging
 from subflow.pipeline import run_pipeline
+
+logger = get_logger(__name__)
 
 app = typer.Typer(
     name="subflow",
@@ -35,23 +37,9 @@ def _app_callback(
     """App-level callback for global options."""
 
 
-# ── Logging setup ──
-logger = logging.getLogger("subflow")
-
-
-def _setup_logging(verbose: int) -> None:
+def _setup_cli_logging(verbose: int) -> None:
     """Configure logging level based on verbosity."""
-    levels = [logging.WARNING, logging.INFO, logging.DEBUG]
-    level = levels[min(verbose, len(levels) - 1)]
-    logging.basicConfig(
-        level=level,
-        format="%(levelname)s: %(message)s" if verbose > 0 else "%(message)s",
-        stream=sys.stderr,
-    )
-    # Suppress noisy third-party loggers unless -vv
-    if verbose < 2:
-        for name in ("faster_whisper", "huggingface_hub", "httpx", "urllib3"):
-            logging.getLogger(name).setLevel(logging.WARNING)
+    setup_logging(verbose)
 
 
 @app.command(name="run")
@@ -199,7 +187,7 @@ def main(
       subflow podcast.mp3 --lang zh        # 指定语言
       subflow video.mp4 -vv --dump-json    # 调试模式
     """
-    _setup_logging(verbose)
+    _setup_cli_logging(verbose)
 
     # ── Load config ──
     config = load_config(config_path)
@@ -275,9 +263,9 @@ def main(
             error_msg = str(e)
             failed.append((filepath, error_msg))
             if verbose > 0:
-                logger.exception("处理失败: %s", filepath)
+                logger.exception("Failed: %s", filepath)
             else:
-                print(f"❌ 处理失败: {error_msg}", file=sys.stderr)
+                logger.error("Failed: %s", error_msg)
 
     # ── Summary ──
     if total > 1:

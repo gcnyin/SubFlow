@@ -10,7 +10,10 @@ from typing import Any
 
 import httpx
 
+from subflow.logging import get_logger
 from subflow.models import SubtitleItem
+
+logger = get_logger(__name__)
 
 # ── Prompt template ──
 
@@ -234,7 +237,7 @@ class OpenAITranslator(Translator):
         for item in items:
             new_text = translated_map.get(item.index)
             if new_text is None:
-                print(f"⚠  索引 {item.index} 的翻译缺失，保留原文")
+                logger.warning("Index %d missing in translation, keeping source text", item.index)
                 new_text = item.text
 
             result.append(

@@ -9,6 +9,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from subflow.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def _default_config_dir() -> Path:
     """Return the platform-appropriate config directory.
@@ -165,7 +169,7 @@ def load_config(config_path: str | None = None) -> SubFlowConfig:
                     elif hasattr(config, key) and value is not None:
                         setattr(config, key, value)
         except Exception as e:
-            print(f"⚠  配置文件读取失败 ({config_file}): {e}，使用默认配置")
+            logger.warning("Failed to read config (%s): %s, using defaults", config_file, e)
 
     # Environment variable overrides for sensitive translator settings
     for env_var, attr in [

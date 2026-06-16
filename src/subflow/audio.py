@@ -1,11 +1,13 @@
 """Audio extraction from video files using FFmpeg."""
 
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 from subflow.ffmpeg import check_ffmpeg
+from subflow.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _count_audio_streams(filepath: Path, ffmpeg_path: str = "ffprobe") -> int:
@@ -60,10 +62,9 @@ def extract_audio(
     if stream_count == 0:
         raise RuntimeError(f"文件中未找到音轨: {filepath}")
     if stream_count > 1 and audio_track == 0:
-        print(
-            f"⚠  检测到 {stream_count} 条音轨，默认使用音轨 0。"
-            f"使用 --audio-track 1 切换。",
-            file=sys.stderr,
+        logger.warning(
+            "Detected %d audio tracks, using track 0. Use --audio-track to switch.",
+            stream_count,
         )
 
     if output_path is None:

@@ -13,9 +13,12 @@ from subflow.align import split_and_align
 from subflow.audio import extract_audio, is_audio_file
 from subflow.burn import burn_subtitle
 from subflow.config import SubFlowConfig
+from subflow.logging import get_logger
 from subflow.subtitle import write_subtitle
 from subflow.transcribe import create_transcriber, detect_device
 from subflow.translate import create_translator
+
+logger = get_logger(__name__)
 
 
 def _source_output_path(input_file: Path, config: SubFlowConfig) -> Path:
@@ -55,7 +58,7 @@ def _dump_transcript_json(words: list[Any], output_path: Path, source_lang: str)
         ],
     }
     output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"📄 Transcript 已保存到: {output_path}")
+    logger.info("Transcript saved: %s", output_path)
 
 
 def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
@@ -87,9 +90,9 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
         # ── Step 1: Audio extraction ──
         if is_audio_file(input_file):
             audio_file = input_file
-            print("🎵 检测到音频文件，跳过提取")
+            logger.info("Detected audio file, skipping extraction")
         else:
-            print("🎵 提取音频...")
+            logger.info("Extracting audio...")
             t0 = time.time()
             audio_file = extract_audio(
                 input_file,
@@ -101,12 +104,11 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
             temp_audio = config.keep_audio is None
             size_mb = audio_file.stat().st_size / (1024 * 1024)
             elapsed = time.time() - t0
-            print(f"   ✓ 完成 ({elapsed:.1f}s, {size_mb:.1f}MB)")
+            logger.info("Done (%.1fs, %.1fMB)", elapsed, size_mb)
 
         # ── Step 2: Create transcriber ──
         device_desc = detect_device()
-        emoji = "🎮" if "CUDA" in device_desc else "🖥️"
-        print(f"{emoji}  使用设备: {device_desc}")
+        logger.info("Device: %s", device_desc)
 
         transcriber = create_transcriber(
             model_size=config.model,
@@ -115,7 +117,7 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
         )
 
         # ── Step 3: Transcription ──
-        print(f"🧠 语音识别 (模型: {config.model})...")
+        logger.info("Transcribing (model: %s)...", config.model)
         t0 = time.time()
 
         words, detected_lang = transcriber.transcribe(
@@ -126,7 +128,7 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
 
         source_lang = config.language or detected_lang
         elapsed = time.time() - t0
-        print(f"   ✓ 识别完成 ({elapsed:.1f}s, {len(words)} 词)")
+        logger.info("Done (%.1fs, %d words)", elapsed, len(words))
 
         if not words:
             raise RuntimeError("未识别到任何语音内容")
@@ -137,7 +139,7 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
             _dump_transcript_json(words, json_path, source_lang)
 
         # ── Step 4: Alignment and splitting ──
-        print("📝 生成字幕...")
+        logger.info("Generating subtitles...")
         t0 = time.time()
 
         items = split_and_align(
@@ -151,7 +153,7 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
         result_path: Path | None = source_path
         if not config.no_source:
             write_subtitle(items, source_path, fmt=config.default_format)
-            print(f"   ✓ {len(items)} 条字幕 → {source_path}")
+            logger.info("%d lines -> %s", len(items), source_path)
         else:
             result_path = None  # Reset — source was not actually written
 
@@ -159,18 +161,21 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
         if config.target_langs:
             translator = create_translator(config.translator)
             for target_lang in config.target_langs:
-                print(f"🌐 翻译 {source_lang}→{target_lang} ({len(items)} 句)...")
+                logger.info(
+                    "Translating %s->%s (%d sentences)...",
+                    source_lang, target_lang, len(items),
+                )
                 t_t0 = time.time()
                 try:
                     translated = translator.translate(items, source_lang, target_lang)
                     trans_path = _translated_output_path(input_file, config, target_lang)
                     write_subtitle(translated, trans_path, fmt=config.default_format)
                     t_elapsed = time.time() - t_t0
-                    print(f"   ✓ 完成 ({t_elapsed:.1f}s) → {trans_path}")
+                    logger.info("Done (%.1fs) -> %s", t_elapsed, trans_path)
                     if result_path is None:
                         result_path = trans_path
                 except Exception as e:
-                    print(f"   ❌ 翻译失败 ({source_lang}→{target_lang}): {e}")
+                    logger.error("Translation failed (%s->%s): %s", source_lang, target_lang, e)
 
         # ── Step 7: Burn subtitles (optional) ──
         if config.burn:
@@ -205,10 +210,10 @@ def run_pipeline(input_file: Path, config: SubFlowConfig) -> Path:
                     if result_path is None:
                         result_path = out_video
                 except Exception as e:
-                    print(f"   ❌ 烧录失败: {e}")
+                    logger.error("Burn failed: %s", e)
 
         total_elapsed = time.time() - start_time
-        print(f"⏱️  总耗时: {total_elapsed:.1f}s")
+        logger.info("Total time: %.1fs", total_elapsed)
 
         return result_path if result_path is not None else source_path
 

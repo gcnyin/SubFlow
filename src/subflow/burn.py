@@ -10,6 +10,9 @@ import time
 from pathlib import Path
 
 from subflow.ffmpeg import check_ffmpeg
+from subflow.logging import get_logger
+
+logger = get_logger(__name__)
 
 # ── Constants ──
 
@@ -69,7 +72,7 @@ def _ensure_fonts(fonts_dir: Path) -> Path:
         if font_path.exists():
             continue
 
-        print(f"📥 下载字体 {font_name} (~16MB)...")
+        logger.info("Downloading font %s (~16MB)...", font_name)
         try:
             resp = httpx.get(url, follow_redirects=True, timeout=120.0)
             resp.raise_for_status()
@@ -265,7 +268,10 @@ def burn_subtitle(
         idx = cmd.index("-vf")
         cmd.insert(idx, f"-fontsdir={fonts_dir}")
 
-    print(f"🎬 烧录字幕 (编码器: {encoder}): {subtitle_path.name} → {output_path.name}")
+    logger.info(
+        "Burning subtitles (encoder: %s): %s -> %s",
+        encoder, subtitle_path.name, output_path.name,
+    )
     t0 = time.time()
 
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -276,6 +282,6 @@ def burn_subtitle(
 
     elapsed = time.time() - t0
     size_mb = output_path.stat().st_size / (1024 * 1024)
-    print(f"   ✓ 完成 ({elapsed:.1f}s, {size_mb:.1f}MB)")
+    logger.info("Done (%.1fs, %.1fMB)", elapsed, size_mb)
 
     return output_path

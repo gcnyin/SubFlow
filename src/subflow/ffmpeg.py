@@ -12,6 +12,10 @@ from pathlib import Path
 
 import httpx
 
+from subflow.logging import get_logger
+
+logger = get_logger(__name__)
+
 # ── Bundled FFmpeg download ──
 
 _BASE_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest"
@@ -61,8 +65,8 @@ def _ensure_bundled_ffmpeg(cache_dir: Path) -> Path:
         raise RuntimeError(f"不支持的平台: {key}，请手动安装 FFmpeg")
 
     url = f"{_BASE_URL}/{archive_name}"
-    print("📥 下载 FFmpeg 中 (~80MB)...")
-    print(f"   来源: {url}")
+    logger.info("Downloading FFmpeg (~80MB)...")
+    logger.info("Source: %s", url)
 
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -81,11 +85,11 @@ def _ensure_bundled_ffmpeg(cache_dir: Path) -> Path:
                         if total:
                             pct = downloaded / total * 100
                             mb = downloaded / (1024 * 1024)
-                            print(f"\r   下载中... {mb:.0f}MB ({pct:.0f}%)", end="", flush=True)
+                            print(f"\r   {mb:.0f}MB ({pct:.0f}%)", end="", flush=True)  # noqa: T201
                 print()  # newline after progress
 
             # Extract ffmpeg binary from archive
-            print("   解压中...")
+            logger.info("Extracting...")
             if archive_name.endswith(".tar.xz"):
                 with tarfile.open(tmp_path) as tar:
                     for member in tar.getmembers():
@@ -102,7 +106,7 @@ def _ensure_bundled_ffmpeg(cache_dir: Path) -> Path:
             # Make executable (Unix only; Windows doesn't need this)
             if not is_windows:
                 ffmpeg_path.chmod(ffmpeg_path.stat().st_mode | stat.S_IEXEC)
-            print(f"   ✓ FFmpeg 就绪: {ffmpeg_path}")
+            logger.info("FFmpeg ready: %s", ffmpeg_path)
 
         except Exception as e:
             raise RuntimeError(

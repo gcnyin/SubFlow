@@ -5,7 +5,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from subflow.logging import get_logger
 from subflow.models import WordTimestamp
+
+logger = get_logger(__name__)
 
 
 class Transcriber(ABC):
@@ -40,7 +43,7 @@ class FasterWhisperTranscriber(Transcriber):
 
         from faster_whisper import WhisperModel  # type: ignore[import-untyped]
 
-        print(f"📥 下载模型 {self.model_size} 中... (首次运行需要下载，约 150MB-6GB)", flush=True)
+        logger.info("Downloading model %s... (first run, ~150MB-6GB)", self.model_size)
         self._model = WhisperModel(
             self.model_size,
             device=self.device,
@@ -78,7 +81,10 @@ class FasterWhisperTranscriber(Transcriber):
         )
 
         detected_language = info.language
-        print(f"🌐 检测到语言: {detected_language} (概率: {info.language_probability:.2%})")
+        logger.info(
+            "Detected language: %s (probability: %.2f%%)",
+            detected_language, info.language_probability * 100,
+        )
 
         words: list[WordTimestamp] = []
         for segment in segments:
@@ -110,7 +116,7 @@ class FasterWhisperTranscriber(Transcriber):
             ],
         }
         output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"📄 Transcript 已保存到: {output_path}")
+        logger.info("Transcript saved: %s", output_path)
 
 
 def detect_device() -> str:
