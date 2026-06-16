@@ -164,7 +164,15 @@ def get_ffmpeg_path(
 
     # 4. Bundled download
     if cache_dir is None:
-        cache_dir = Path.home() / ".cache" / "subflow"
+        system = platform.system()
+        if system == "Windows":
+            base = os.environ.get("LOCALAPPDATA", str(Path.home()))
+            cache_dir = Path(base) / "subflow"
+        elif system == "Darwin":
+            cache_dir = Path.home() / "Library" / "Caches" / "subflow"
+        else:
+            xdg = os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
+            cache_dir = Path(xdg) / "subflow"
 
     try:
         return str(_ensure_bundled_ffmpeg(cache_dir))

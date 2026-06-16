@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import platform
 import subprocess
 import time
 from pathlib import Path
@@ -179,8 +181,15 @@ def burn_subtitle(
     if fonts_dir:
         font_dir_path = Path(fonts_dir)
     else:
-        from pathlib import Path as _Path
-        font_dir_path = _Path.home() / ".cache" / "subflow" / "fonts"
+        system = platform.system()
+        if system == "Windows":
+            base = os.environ.get("LOCALAPPDATA", str(Path.home()))
+            font_dir_path = Path(base) / "subflow" / "fonts"
+        elif system == "Darwin":
+            font_dir_path = Path.home() / "Library" / "Caches" / "subflow" / "fonts"
+        else:
+            xdg = os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
+            font_dir_path = Path(xdg) / "subflow" / "fonts"
 
     # If no explicit font, ensure default CJK fonts exist
     if font is None:

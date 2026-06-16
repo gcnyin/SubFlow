@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import platform
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,15 +11,39 @@ from typing import Any
 
 
 def _default_config_dir() -> Path:
-    """Return the default config directory: ~/.config/subflow/"""
-    xdg_config = Path.home() / ".config" / "subflow"
-    return xdg_config
+    """Return the platform-appropriate config directory.
+
+    Linux:   ~/.config/subflow/      (XDG)
+    macOS:   ~/Library/Application Support/subflow/
+    Windows: %APPDATA%\\subflow\
+    """
+    system = platform.system()
+    if system == "Windows":
+        base = os.environ.get("APPDATA", str(Path.home()))
+        return Path(base) / "subflow"
+    if system == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "subflow"
+    # Linux / XDG
+    xdg = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+    return Path(xdg) / "subflow"
 
 
 def _default_cache_dir() -> Path:
-    """Return the default cache directory: ~/.cache/subflow/"""
-    xdg_cache = Path.home() / ".cache" / "subflow"
-    return xdg_cache
+    """Return the platform-appropriate cache directory.
+
+    Linux:   ~/.cache/subflow/       (XDG)
+    macOS:   ~/Library/Caches/subflow/
+    Windows: %LOCALAPPDATA%\\subflow\
+    """
+    system = platform.system()
+    if system == "Windows":
+        base = os.environ.get("LOCALAPPDATA", str(Path.home()))
+        return Path(base) / "subflow"
+    if system == "Darwin":
+        return Path.home() / "Library" / "Caches" / "subflow"
+    # Linux / XDG
+    xdg = os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
+    return Path(xdg) / "subflow"
 
 
 @dataclass
@@ -142,7 +168,6 @@ def load_config(config_path: str | None = None) -> SubFlowConfig:
             print(f"⚠  配置文件读取失败 ({config_file}): {e}，使用默认配置")
 
     # Environment variable overrides for sensitive translator settings
-    import os
     for env_var, attr in [
         ("SUBFLOW_TRANSLATOR_API_KEY", "api_key"),
         ("SUBFLOW_TRANSLATOR_BASE_URL", "base_url"),
